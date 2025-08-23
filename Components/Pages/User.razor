@@ -1,0 +1,179 @@
+﻿@page "/user"
+@rendermode InteractiveServer
+@using ProjectBarber.Components.Pages.Model
+@using System.Text.Json
+@using System.IO
+
+@inject IWebHostEnvironment env
+
+<h2>Welcome To ABC Saloon</h2>
+
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8">
+            <div class="row">
+                @foreach (var item in services)
+                {
+                    <div class="col-md-3 mb-4">
+                        <div class="card h-100" style="cursor: pointer;" @onclick="@(() => AddToCart(item))">
+                            <img src="@item.ImageUrl" class="card-img-top" style="height: 140px; object-fit: cover;" />
+                            <div class="card-body text-center">
+                                <h6 class="card-title">@item.ServiceName</h6>
+                                <p class="text-muted">@item.Category</p>
+                                <strong>Rs. @item.Price</strong>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="col-md-4 border-start ps-3">
+            <h5>Total: Rs. @GetTotal()</h5>
+
+            <table class="table table-sm table-bordered">
+                <thead class="table-light">
+                    <tr>
+                        <th>Img</th>
+                        <th>Service</th>
+                        <th>Qty</th>
+                        <th>Price</th>
+                        <th>Sub</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in cart)
+                    {
+                        <tr>
+                            <td><img src="@item.Service?.ImageUrl" width="40" height="40" /></td>
+                            <td>@item.Service?.ServiceName</td>
+                            <td>@item.Quantity</td>
+                            <td>@item.Service?.Price</td>
+                            <td>@(item.Service?.Price * item.Quantity)</td>
+                            <td>
+                                <button class="btn btn-danger btn-sm" @onclick="() => RemoveFromCart(item)">Remove</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            @if (cart.Any())
+            {
+                <h5>Receipt</h5>
+                <table class="table table-bordered">
+                    <thead class="table-secondary">
+                        <tr>
+                            <th>Service</th>
+                            <th>Qty</th>
+                            <th>Price</th>
+                            <th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in cart)
+                        {
+                            <tr>
+                                <td>@item.Service?.ServiceName</td>
+                                <td>@item.Quantity</td>
+                                <td>@item.Service?.Price</td>
+                                <td>@(item.Quantity* item.Service?.Price)</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="3"><strong>Total</strong></td>
+                            <td><strong>@cart.Sum(i => i.Quantity * i.Service?.Price)</strong></td>
+                        </tr>
+                    </tfoot>
+                </table>
+
+                <button class="btn btn-primary w-100">Print</button>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    string ServicesFile => Path.Combine(env.ContentRootPath, "Data", "BarberServices.json");
+    string CartFile => Path.Combine(env.ContentRootPath, "Data", "Cart.json");
+
+    List<Barber> services = new();
+    List<SelectedService> cart = new();
+
+    protected override void OnInitialized()
+    {
+        LoadServices();
+        LoadCart();
+    }
+
+    void LoadServices()
+    {
+        if (File.Exists(ServicesFile))
+        {
+            var json = File.ReadAllText(ServicesFile);
+            services = JsonSerializer.Deserialize<List<Barber>>(json) ?? new();
+        }
+    }
+
+    void LoadCart()
+    {
+        if (!File.Exists(CartFile)) return;
+
+        var json = File.ReadAllText(CartFile);
+        var savedItems = JsonSerializer.Deserialize<List<CartItemDto>>(json);
+
+        foreach (var savedItem in savedItems!)
+        {
+            var match = services.FirstOrDefault(s => s.ServiceName == savedItem.ServiceName);
+            if (match != null)
+            {
+                cart.Add(new SelectedService
+                {
+                    Service = match,
+                    Quantity = savedItem.Quantity
+                });
+            }
+        }
+    }
+
+    void SaveCart()
+    {
+        var saveList = cart.Select(c => new CartItemDto
+        {
+            ServiceName = c.Service?.ServiceName,
+            Quantity = c.Quantity
+        }).ToList();
+
+        var json = JsonSerializer.Serialize(saveList, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(CartFile, json);
+    }
+
+    void AddToCart(Barber service)
+    {
+        var found = cart.FirstOrDefault(c => c.Service?.Id == service.Id);
+        if (found != null)
+        {
+            found.Quantity++;
+        }
+        else
+        {
+            cart.Add(new SelectedService { Service = service, Quantity = 1 });
+        }
+
+        SaveCart();
+    }
+
+    void RemoveFromCart(SelectedService item)
+    {
+        cart.Remove(item);
+        SaveCart();
+    }
+
+    decimal GetTotal()
+    {
+        return cart.Sum(i => i.Service!.Price * i.Quantity);
+    }
+}

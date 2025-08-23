@@ -1,0 +1,136 @@
+﻿@page "/admin"
+@rendermode InteractiveServer
+
+@using System.Text.Json
+@using System.IO
+@using ProjectBarber.Components.Pages.Model 
+@inject IWebHostEnvironment env
+
+<h3>Admin Panel – Manage Barber Services</h3>
+
+<EditForm Model="barber" OnValidSubmit="SaveService">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+    
+    <input @bind="barber.ServiceName" placeholder="Service Name"  />
+    <input @bind="barber.Category" placeholder="Category (Haircut, Beard, etc)"  />
+    <input @bind="barber.Price" placeholder="Price" type="number"  />
+    <input @bind="barber.ImageUrl" placeholder="Image URL or path"  />
+
+    @if (isEdit)
+    {
+        <button class="btn btn-warning" type="submit">Update</button>
+      <button @ onclick ="CancelEdit">Cancel </button>
+    }
+    else
+    {
+        <button class="btn btn-success" type="submit">Add</button>
+    }
+</EditForm>
+
+<hr />
+<h5>Service List</h5>
+<table class="table table-bordered">
+    <thead>
+        <tr>
+            <th>Image</th>
+            <th>Name</th>
+            <th>Category</th>
+            <th>Price</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var s in services)
+        {
+            <tr>
+                <td><img src="@s.ImageUrl" width="50" /></td>
+                <td>@s.ServiceName</td>
+                <td>@s.Category</td>
+                <td>@s.Price</td>
+                <td>
+                    <button class="btn btn-primary" @onclick="() => EditService(s)">Edit</button>
+                    <button class="btn btn-danger btn-sm" @onclick="() => DeleteService(s.Id)">Delete</button>
+                </td>
+                
+                    
+                
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    string FilePath => Path.Combine(env.ContentRootPath, "Data", "BarberServices.json");
+
+    List<Barber> services = new();
+    Barber barber = new ();
+    bool isEdit = false;
+
+    protected override void OnInitialized()
+    {
+        LoadServices();
+    }
+
+    private void LoadServices()
+    {
+        if (File.Exists(FilePath))
+        {
+            var json = File.ReadAllText(FilePath);
+            services = JsonSerializer.Deserialize<List<Barber>>(json) ?? new();
+        }
+    }
+
+    private void SaveServicesToFile()
+    {
+        var json = JsonSerializer.Serialize(services, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(FilePath, json);
+    }
+
+    private void SaveService()
+    {
+        if (isEdit)
+        {
+            var index = services.FindIndex(s => s.Id == barber.Id);
+            if (index != -1) services[index] = barber;
+            isEdit = false;
+        }
+        else
+        {
+            barber.Id = services.Count + 1;
+            services.Add(barber);
+        }
+
+        SaveServicesToFile();
+        barber = new();
+    }
+
+    private void EditService(Barber b)
+    {
+        barber = new Barber
+        {
+            Id = b.Id,
+            ServiceName = b.ServiceName,
+            Category = b.Category,
+            Price = b.Price,
+            ImageUrl = b.ImageUrl
+        };
+        isEdit = true;
+
+    }
+    private void CancelEdit()
+    {
+        isEdit = false;
+    }
+    void DeleteService(int id)
+    {
+        var serviceToRemove = services.FirstOrDefault(s => s.Id == id);
+        if (serviceToRemove != null)
+        {
+            services.Remove(serviceToRemove);
+            SaveServicesToFile(); 
+        }
+    }
+
+}
+
